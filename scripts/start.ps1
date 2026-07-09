@@ -114,6 +114,7 @@ if (-not $NoBrowser) {
 try {
   while ($true) {
     $client = $listener.AcceptTcpClient()
+    $stream = $null
 
     try {
       $stream = $client.GetStream()
