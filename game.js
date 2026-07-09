@@ -1,6 +1,6 @@
 const SCRIPT_URL = "./剧本.txt";
 const TYPE_DELAY_MS = 34;
-const AUTO_PLAY_DELAY_MS = 1400;
+const AUTO_PLAY_DELAY_MS = 300;
 const LINES_PER_PAGE = 6;
 const BACKGROUND_FADE_MS = 720;
 const CHARACTER_FADE_MS = 520;
@@ -138,6 +138,16 @@ function bindControls() {
     }
 
     event.preventDefault();
+
+    if (event.key === " ") {
+      if (event.repeat) {
+        return;
+      }
+
+      toggleAutoPlay();
+      return;
+    }
+
     stopAutoPlay();
     advanceStory();
   });
@@ -172,7 +182,6 @@ function handlePointerDown(event) {
 
 function handleContextMenu(event) {
   event.preventDefault();
-  toggleAutoPlay();
 }
 
 function handleWheel(event) {
