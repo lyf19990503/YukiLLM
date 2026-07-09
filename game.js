@@ -1,5 +1,6 @@
 const SCRIPT_URL = "./剧本.txt";
 const TYPE_DELAY_MS = 34;
+const AUTO_PLAY_DELAY_MS = 1400;
 const LINES_PER_PAGE = 6;
 const BACKGROUND_FADE_MS = 720;
 const CHARACTER_FADE_MS = 520;
@@ -65,6 +66,8 @@ const state = {
   charIndex: 0,
   typingTimer: 0,
   fastForwardTimer: 0,
+  autoPlayTimer: 0,
+  isAutoPlaying: false,
   isTyping: false,
   visual: {
     backgroundSlotIndex: 0,
@@ -119,7 +122,9 @@ async function init() {
 }
 
 function bindControls() {
-  elements.game.addEventListener("pointerdown", advanceStory);
+  elements.game.addEventListener("pointerdown", handlePointerDown);
+  elements.game.addEventListener("contextmenu", handleContextMenu);
+  elements.game.addEventListener("wheel", handleWheel, { passive: false });
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Control") {
@@ -133,6 +138,7 @@ function bindControls() {
     }
 
     event.preventDefault();
+    stopAutoPlay();
     advanceStory();
   });
 
@@ -142,13 +148,41 @@ function bindControls() {
     }
   });
 
-  window.addEventListener("blur", stopFastForward);
+  window.addEventListener("blur", () => {
+    stopFastForward();
+    stopAutoPlay();
+  });
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       stopFastForward();
+      stopAutoPlay();
     }
   });
+}
+
+function handlePointerDown(event) {
+  if (event.button !== 0) {
+    return;
+  }
+
+  stopAutoPlay();
+  advanceStory();
+}
+
+function handleContextMenu(event) {
+  event.preventDefault();
+  toggleAutoPlay();
+}
+
+function handleWheel(event) {
+  if (event.deltaY >= 0) {
+    return;
+  }
+
+  event.preventDefault();
+  stopAutoPlay();
+  retreatStory();
 }
 
 function startFastForward() {
@@ -156,8 +190,9 @@ function startFastForward() {
     return;
   }
 
+  stopAutoPlay();
   advanceStory();
-  state.fastForwardTimer = window.setInterval(advanceStory, 100);
+  state.fastForwardTimer = window.setInterval(advanceStory, 50);
 }
 
 function stopFastForward() {
@@ -169,26 +204,120 @@ function stopFastForward() {
   state.fastForwardTimer = 0;
 }
 
-function advanceStory() {
+function toggleAutoPlay() {
+  if (state.isAutoPlaying) {
+    stopAutoPlay();
+    return;
+  }
+
+  startAutoPlay();
+}
+
+function startAutoPlay() {
+  if (state.pages.length === 0 || isAtStoryEnd()) {
+    return;
+  }
+
+  stopFastForward();
+  state.isAutoPlaying = true;
+  scheduleAutoPlay();
+}
+
+function stopAutoPlay() {
+  if (!state.isAutoPlaying && !state.autoPlayTimer) {
+    return;
+  }
+
+  window.clearTimeout(state.autoPlayTimer);
+  state.autoPlayTimer = 0;
+  state.isAutoPlaying = false;
+}
+
+function scheduleAutoPlay() {
+  window.clearTimeout(state.autoPlayTimer);
+  state.autoPlayTimer = 0;
+
+  if (!state.isAutoPlaying || state.isTyping || isAtStoryEnd()) {
+    if (state.isAutoPlaying && isAtStoryEnd()) {
+      stopAutoPlay();
+    }
+
+    return;
+  }
+
+  state.autoPlayTimer = window.setTimeout(() => {
+    state.autoPlayTimer = 0;
+
+    if (!state.isAutoPlaying) {
+      return;
+    }
+
+    const didAdvance = advanceStory();
+
+    if (!didAdvance && state.isAutoPlaying) {
+      stopAutoPlay();
+    }
+  }, AUTO_PLAY_DELAY_MS);
+}
+
+function retreatStory() {
   if (state.pages.length === 0) {
     return;
   }
 
+  const previousPosition = getPreviousLinePosition();
+
+  if (!previousPosition) {
+    return;
+  }
+
+  renderPageThroughLine(previousPosition.pageIndex, previousPosition.lineIndex);
+}
+
+function getPreviousLinePosition() {
+  if (state.lineIndex > 0) {
+    return {
+      pageIndex: state.pageIndex,
+      lineIndex: state.lineIndex - 1,
+    };
+  }
+
+  if (state.pageIndex <= 0) {
+    return null;
+  }
+
+  const previousPageIndex = state.pageIndex - 1;
+  const previousPage = state.pages[previousPageIndex];
+
+  return {
+    pageIndex: previousPageIndex,
+    lineIndex: previousPage.lines.length - 1,
+  };
+}
+
+function advanceStory() {
+  if (state.pages.length === 0) {
+    return false;
+  }
+
   if (state.isTyping) {
     completeCurrentLine();
-    return;
+    return true;
   }
 
   const page = state.pages[state.pageIndex];
 
   if (state.lineIndex < page.lines.length - 1) {
     showLine(state.lineIndex + 1);
-    return;
+    return true;
   }
 
   if (state.pageIndex < state.pages.length - 1) {
     showPage(state.pageIndex + 1);
+    return true;
   }
+
+  return false;
 }
 
 function showPage(pageIndex) {
@@ -204,6 +333,39 @@ function showPage(pageIndex) {
   elements.dialogueBox.classList.toggle("is-title", page.type === "chapter" || page.type === "section");
 
   showLine(0);
+}
+
+function renderPageThroughLine(pageIndex, lineIndex) {
+  window.clearTimeout(state.typingTimer);
+
+  const page = state.pages[pageIndex];
+  const safeLineIndex = Math.max(0, Math.min(lineIndex, page.lines.length - 1));
+
+  state.pageIndex = pageIndex;
+  state.lineIndex = safeLineIndex;
+  state.currentLine = page.lines[safeLineIndex];
+  state.lineChars = Array.from(state.currentLine);
+  state.charIndex = state.lineChars.length;
+  state.isTyping = false;
+
+  elements.storyText.textContent = "";
+  elements.progress.textContent = `${pageIndex + 1} / ${state.pages.length}`;
+  elements.dialogueBox.classList.toggle("is-title", page.type === "chapter" || page.type === "section");
+
+  for (let index = 0; index <= safeLineIndex; index += 1) {
+    const lineElement = document.createElement("div");
+    lineElement.className = "story-line";
+    lineElement.textContent = page.lines[index];
+    elements.storyText.append(lineElement);
+
+    if (index === safeLineIndex) {
+      state.currentLineElement = lineElement;
+    }
+  }
+
+  updateVisuals(pageIndex, safeLineIndex);
+  updateNextMark();
+  elements.nextMark.classList.add("is-ready");
 }
 
 function showLine(lineIndex) {
@@ -230,6 +392,7 @@ function typeNextCharacter() {
     state.isTyping = false;
     updateNextMark();
     elements.nextMark.classList.add("is-ready");
+    scheduleAutoPlay();
     return;
   }
 
@@ -246,6 +409,7 @@ function completeCurrentLine() {
   state.isTyping = false;
   updateNextMark();
   elements.nextMark.classList.add("is-ready");
+  scheduleAutoPlay();
 }
 
 function updateNextMark() {
@@ -254,6 +418,24 @@ function updateNextMark() {
   const isLastPage = state.pageIndex >= state.pages.length - 1;
 
   elements.nextMark.textContent = isLastLine && isLastPage ? "◆" : "▼";
+}
+
+function isAtStoryEnd() {
+  if (state.pages.length === 0) {
+    return true;
+  }
+
+  const page = state.pages[state.pageIndex];
+
+  if (!page) {
+    return true;
+  }
+
+  return (
+    !state.isTyping &&
+    state.pageIndex >= state.pages.length - 1 &&
+    state.lineIndex >= page.lines.length - 1
+  );
 }
 
 function parseScript(scriptText) {
