@@ -1,5 +1,5 @@
 const SCRIPT_URL = "./剧本.txt";
-const TYPE_DELAY_MS = 34;
+const TYPE_DELAY_MS = 37;
 const AUTO_PLAY_DELAY_MS = 300;
 const LINES_PER_PAGE = 6;
 const BACKGROUND_FADE_MS = 720;
