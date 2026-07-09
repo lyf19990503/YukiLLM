@@ -87,17 +87,16 @@ body {
   position: absolute;
   bottom: -135vh;
   --character-x: 0;
+  --character-y: 0px;
   max-height: none;
   width: min(30vw, 30rem);
   object-fit: contain;
   object-position: bottom center;
   opacity: 1;
   filter: drop-shadow(0 1.25rem 1.75rem rgba(0, 0, 0, 0.45));
-  transform: translateX(var(--character-x));
-  transition:
-    opacity 520ms ease,
-    transform 520ms ease;
-  will-change: opacity, transform;
+  transform: translateX(var(--character-x)) translateY(var(--character-y));
+  transition: opacity 520ms ease;
+  will-change: opacity;
 }
 
 .character-left {
@@ -117,7 +116,7 @@ body {
 
 .character.is-hidden {
   opacity: 0;
-  transform: translateX(var(--character-x)) translateY(1.25rem);
+  transform: translateX(var(--character-x)) translateY(var(--character-y));
 }
 
 .dialogue-box {

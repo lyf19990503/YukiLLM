@@ -13,6 +13,11 @@ const VISUAL_CONFIG = {
       center: "",
       right: "",
     },
+    characterOffsets: {
+      left: 0,
+      center: 0,
+      right: 0,
+    },
   },
   cues: [
     // 按页/行切换，可用于后续剧情演出：
@@ -50,6 +55,7 @@ const state = {
   initialVisual: {
     background: VISUAL_CONFIG.default.background,
     characters: { ...VISUAL_CONFIG.default.characters },
+    characterOffsets: { ...VISUAL_CONFIG.default.characterOffsets },
   },
   pageIndex: 0,
   lineIndex: 0,
@@ -58,6 +64,7 @@ const state = {
   lineChars: [],
   charIndex: 0,
   typingTimer: 0,
+  fastForwardTimer: 0,
   isTyping: false,
   visual: {
     backgroundSlotIndex: 0,
@@ -74,6 +81,8 @@ const state = {
       center: elements.characters.center.getAttribute("src") || "",
       right: elements.characters.right.getAttribute("src") || "",
     },
+    characterOffsetY: { ...VISUAL_CONFIG.default.characterOffsets },
+    characterOffsetTarget: { ...VISUAL_CONFIG.default.characterOffsets },
     characterTimers: {},
   },
 };
@@ -113,6 +122,12 @@ function bindControls() {
   elements.game.addEventListener("pointerdown", advanceStory);
 
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Control") {
+      event.preventDefault();
+      startFastForward();
+      return;
+    }
+
     if (event.key !== " " && event.key !== "Enter") {
       return;
     }
@@ -120,6 +135,38 @@ function bindControls() {
     event.preventDefault();
     advanceStory();
   });
+
+  window.addEventListener("keyup", (event) => {
+    if (event.key === "Control") {
+      stopFastForward();
+    }
+  });
+
+  window.addEventListener("blur", stopFastForward);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopFastForward();
+    }
+  });
+}
+
+function startFastForward() {
+  if (state.fastForwardTimer) {
+    return;
+  }
+
+  advanceStory();
+  state.fastForwardTimer = window.setInterval(advanceStory, 200);
+}
+
+function stopFastForward() {
+  if (!state.fastForwardTimer) {
+    return;
+  }
+
+  window.clearInterval(state.fastForwardTimer);
+  state.fastForwardTimer = 0;
 }
 
 function advanceStory() {
@@ -215,6 +262,7 @@ function parseScript(scriptText) {
   const initialVisual = {
     background: VISUAL_CONFIG.default.background,
     characters: { ...VISUAL_CONFIG.default.characters },
+    characterOffsets: { ...VISUAL_CONFIG.default.characterOffsets },
   };
   const lines = scriptText
     .replace(/^\uFEFF/, "")
@@ -301,14 +349,15 @@ function groupEntriesIntoPages(entries) {
 }
 
 function parseVisualDirective(line, globalLine) {
-  const match = line.match(/^<([^>]+)><([^>]+)>$/);
+  const tags = Array.from(line.matchAll(/<([^>]+)>/g), (match) => match[1].trim());
 
-  if (!match) {
+  if (tags.length < 2 || tags.join("").length + tags.length * 2 !== line.length) {
     return null;
   }
 
-  const command = match[1].trim();
-  const assetPath = normalizeAssetPath(match[2]);
+  const command = tags[0];
+  const assetPath = normalizeAssetPath(tags[1]);
+  const movementOffset = parseMovementOffset(tags[2]);
 
   if (command === "背景") {
     return { globalLine, background: assetPath };
@@ -334,7 +383,32 @@ function parseVisualDirective(line, globalLine) {
     characters: {
       [position]: isExit ? null : assetPath,
     },
+    characterOffsets: isExit
+      ? undefined
+      : {
+          [position]: movementOffset ?? 0,
+        },
   };
+}
+
+function parseMovementOffset(tagText) {
+  if (!tagText) {
+    return null;
+  }
+
+  const match = tagText.match(/^向(上|下)移动(-?\d+(?:\.\d+)?)(?:px)?$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[2]);
+
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return match[1] === "上" ? -value : value;
 }
 
 function normalizeAssetPath(assetPath) {
@@ -369,7 +443,7 @@ function updateVisuals(pageIndex, lineIndex) {
   setBackground(visual.background);
 
   for (const position of CHARACTER_POSITIONS) {
-    setCharacter(position, visual.characters[position]);
+    setCharacter(position, visual.characters[position], visual.characterOffsets[position]);
   }
 }
 
@@ -392,6 +466,9 @@ function applyInitialVisual(visual) {
 
     state.visual.characterSrc[position] = src;
     state.visual.characterTarget[position] = src;
+    state.visual.characterOffsetY[position] = visual.characterOffsets[position] || 0;
+    state.visual.characterOffsetTarget[position] = visual.characterOffsets[position] || 0;
+    element.style.setProperty("--character-y", `${state.visual.characterOffsetY[position]}px`);
 
     if (src) {
       element.src = src;
@@ -407,6 +484,7 @@ function resolveVisual(pageIndex, lineIndex) {
   const visual = {
     background: state.initialVisual.background || VISUAL_CONFIG.default.background,
     characters: { ...state.initialVisual.characters },
+    characterOffsets: { ...state.initialVisual.characterOffsets },
   };
 
   for (const entry of VISUAL_CONFIG.pages) {
@@ -459,6 +537,13 @@ function applyVisualEntry(visual, entry) {
       ...entry.characters,
     };
   }
+
+  if (entry.characterOffsets) {
+    visual.characterOffsets = {
+      ...visual.characterOffsets,
+      ...entry.characterOffsets,
+    };
+  }
 }
 
 function getGlobalLineIndex(pageIndex, lineIndex) {
@@ -499,16 +584,22 @@ function setBackground(src) {
   whenImageReady(nextSlot, activate);
 }
 
-function setCharacter(position, src) {
+function setCharacter(position, src, offsetY = 0) {
   const element = elements.characters[position];
   const nextSrc = src || "";
+  const nextOffsetY = Number.isFinite(offsetY) ? offsetY : 0;
+  setCharacterOffset(position, nextOffsetY);
 
-  if (state.visual.characterTarget[position] === nextSrc) {
+  if (
+    state.visual.characterTarget[position] === nextSrc &&
+    state.visual.characterOffsetTarget[position] === nextOffsetY
+  ) {
     return;
   }
 
   window.clearTimeout(state.visual.characterTimers[position]);
   state.visual.characterTarget[position] = nextSrc;
+  state.visual.characterOffsetTarget[position] = nextOffsetY;
 
   if (!nextSrc) {
     hideCharacter(position);
@@ -527,6 +618,16 @@ function setCharacter(position, src) {
   }
 
   showCharacter(position, nextSrc);
+}
+
+function setCharacterOffset(position, offsetY) {
+  if (state.visual.characterOffsetTarget[position] === offsetY) {
+    return;
+  }
+
+  state.visual.characterOffsetY[position] = offsetY;
+  state.visual.characterOffsetTarget[position] = offsetY;
+  elements.characters[position].style.setProperty("--character-y", `${offsetY}px`);
 }
 
 function showCharacter(position, src) {
