@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 980" role="img" aria-label="人物立绘占位">
+  <defs>
+    <linearGradient id="coat" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#263941"/>
+      <stop offset="0.58" stop-color="#121820"/>
+      <stop offset="1" stop-color="#07090d"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#d4b2a0"/>
+      <stop offset="1" stop-color="#8d6f64"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#111922"/>
+      <stop offset="1" stop-color="#05070a"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <path d="M78 978c8-147 35-261 81-342 34-61 86-97 151-108 80-14 146 0 198 43 65 54 104 188 122 407H78z" fill="url(#coat)"/>
+    <path d="M220 545c30 64 66 96 108 96 41 0 78-32 111-96l-22 181c-66 41-132 42-198 3l1-184z" fill="#c6a796"/>
+    <path d="M193 302c-4 94 13 167 51 218 27 36 56 54 87 54 35 0 67-21 97-63 35-50 51-122 47-216-6-119-54-184-145-194-86 7-132 74-137 201z" fill="url(#skin)"/>
+    <path d="M185 324c-24-109 4-196 85-260 62-49 151-65 229-31 65 28 101 90 110 185-64-71-139-107-224-107-80 0-146 34-200 213z" fill="url(#hair)"/>
+    <path d="M228 116c-18 111-4 203 42 276-3-91 20-179 70-264-5 109 23 202 85 278-9-98 7-184 49-258 43 80 55 168 37 264 62-76 83-165 64-267" fill="url(#hair)" opacity="0.95"/>
+    <path d="M231 397c47-11 86-9 117 5M382 400c36-12 68-12 96-1" stroke="#1c1718" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <path d="M318 510c24 12 47 12 70 0" stroke="#3a2320" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <path d="M265 663c25 54 50 101 75 141 24-46 49-93 76-141" stroke="#071016" stroke-width="31" stroke-linecap="round" fill="none"/>
+    <path d="M172 651c37 69 82 125 135 168-63 8-116 3-159-15M501 650c-38 70-84 126-137 169 63 9 117 4 162-16" stroke="#354c57" stroke-width="18" stroke-linecap="round" fill="none" opacity="0.52"/>
+    <path d="M200 748c78 31 166 31 263 0" stroke="#0b1118" stroke-width="12" opacity="0.48"/>
+  </g>
+</svg>

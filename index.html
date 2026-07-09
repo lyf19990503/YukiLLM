@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AiTypeMoon</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="game" class="game" aria-live="polite">
+      <div class="scene">
+        <img
+          id="background-a"
+          class="background is-active"
+          src="./assets/bg-placeholder.svg"
+          alt=""
+          aria-hidden="true"
+        />
+        <img id="background-b" class="background" alt="" aria-hidden="true" />
+        <div class="scene-shade" aria-hidden="true"></div>
+
+        <div class="character-layer" aria-hidden="true">
+          <img id="character-left" class="character character-left is-hidden" alt="" />
+          <img id="character-center" class="character character-center is-hidden" alt="" />
+          <img id="character-right" class="character character-right is-hidden" alt="" />
+        </div>
+
+        <section id="dialogue-box" class="dialogue-box">
+          <div class="dialogue-meta">
+            <span id="progress" class="progress">0 / 0</span>
+          </div>
+          <div id="story-text" class="story-text"></div>
+          <span id="next-mark" class="next-mark" aria-hidden="true">▼</span>
+        </section>
+
+        <div id="loading" class="loading">读取剧本中...</div>
+      </div>
+    </main>
+
+    <script type="module" src="./game.js"></script>
+  </body>
+</html>
