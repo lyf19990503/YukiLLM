@@ -88,6 +88,12 @@ const state = {
     characterOffsetTarget: { ...VISUAL_CONFIG.default.characterOffsets },
     characterTimers: {},
   },
+  audio: {
+    bgmElement: new Audio(),
+    bgmSrc: "",
+    bgmTarget: "",
+    bgmPendingPlay: false,
+  },
 };
 
 init();
@@ -122,6 +128,10 @@ async function init() {
 }
 
 function bindControls() {
+  state.audio.bgmElement.loop = true;
+  state.audio.bgmElement.preload = "auto";
+  state.audio.bgmElement.volume = 0.72;
+
   elements.game.addEventListener("pointerdown", handlePointerDown);
   elements.game.addEventListener("contextmenu", handleContextMenu);
   elements.game.addEventListener("wheel", handleWheel, { passive: false });
@@ -129,6 +139,7 @@ function bindControls() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Control") {
       event.preventDefault();
+      handleAudioGesture();
       startFastForward();
       return;
     }
@@ -138,6 +149,7 @@ function bindControls() {
     }
 
     event.preventDefault();
+    handleAudioGesture();
 
     if (event.key === " ") {
       if (event.repeat) {
@@ -172,6 +184,8 @@ function bindControls() {
 }
 
 function handlePointerDown(event) {
+  handleAudioGesture();
+
   if (event.button !== 0) {
     return;
   }
@@ -182,6 +196,7 @@ function handlePointerDown(event) {
 
 function handleContextMenu(event) {
   event.preventDefault();
+  handleAudioGesture();
 }
 
 function handleWheel(event) {
@@ -190,6 +205,7 @@ function handleWheel(event) {
   }
 
   event.preventDefault();
+  handleAudioGesture();
   stopAutoPlay();
   retreatStory();
 }
@@ -550,6 +566,10 @@ function parseVisualDirective(line, globalLine) {
   const assetPath = normalizeAssetPath(tags[1]);
   const movementOffset = parseMovementOffset(tags[2]);
 
+  if (command.toUpperCase() === "BGM") {
+    return { globalLine, bgm: assetPath };
+  }
+
   if (command === "背景") {
     return { globalLine, background: assetPath };
   }
@@ -632,6 +652,7 @@ function updateVisuals(pageIndex, lineIndex) {
   const visual = resolveVisual(pageIndex, lineIndex);
 
   setBackground(visual.background);
+  setBgm(visual.bgm);
 
   for (const position of CHARACTER_POSITIONS) {
     setCharacter(position, visual.characters[position], visual.characterOffsets[position]);
@@ -674,6 +695,7 @@ function applyInitialVisual(visual) {
 function resolveVisual(pageIndex, lineIndex) {
   const visual = {
     background: state.initialVisual.background || VISUAL_CONFIG.default.background,
+    bgm: "",
     characters: { ...state.initialVisual.characters },
     characterOffsets: { ...state.initialVisual.characterOffsets },
   };
@@ -720,6 +742,10 @@ function hasReachedVisualCue(entry, pageIndex, lineIndex) {
 function applyVisualEntry(visual, entry) {
   if (entry.background !== undefined && entry.background !== null) {
     visual.background = entry.background;
+  }
+
+  if (entry.bgm !== undefined && entry.bgm !== null) {
+    visual.bgm = entry.bgm;
   }
 
   if (entry.characters) {
@@ -773,6 +799,68 @@ function setBackground(src) {
   };
 
   whenImageReady(nextSlot, activate);
+}
+
+function setBgm(src) {
+  const nextSrc = src || "";
+
+  if (state.audio.bgmTarget === nextSrc) {
+    return;
+  }
+
+  const audio = state.audio.bgmElement;
+  state.audio.bgmTarget = nextSrc;
+  state.audio.bgmPendingPlay = false;
+
+  if (!nextSrc) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    state.audio.bgmSrc = "";
+    return;
+  }
+
+  audio.pause();
+  audio.src = nextSrc;
+  audio.currentTime = 0;
+  state.audio.bgmSrc = nextSrc;
+  requestBgmPlayback();
+}
+
+function handleAudioGesture() {
+  const audio = state.audio.bgmElement;
+
+  if (!state.audio.bgmTarget) {
+    return;
+  }
+
+  if (!state.audio.bgmPendingPlay && !audio.paused) {
+    return;
+  }
+
+  requestBgmPlayback();
+}
+
+function requestBgmPlayback() {
+  const audio = state.audio.bgmElement;
+  const requestedSrc = state.audio.bgmTarget;
+
+  if (!requestedSrc) {
+    return;
+  }
+
+  state.audio.bgmPendingPlay = false;
+  const playPromise = audio.play();
+
+  if (!playPromise || typeof playPromise.catch !== "function") {
+    return;
+  }
+
+  playPromise.catch(() => {
+    if (state.audio.bgmTarget === requestedSrc) {
+      state.audio.bgmPendingPlay = true;
+    }
+  });
 }
 
 function setCharacter(position, src, offsetY = 0) {
