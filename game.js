@@ -157,7 +157,7 @@ function startFastForward() {
   }
 
   advanceStory();
-  state.fastForwardTimer = window.setInterval(advanceStory, 200);
+  state.fastForwardTimer = window.setInterval(advanceStory, 100);
 }
 
 function stopFastForward() {
