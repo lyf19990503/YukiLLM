@@ -4,6 +4,8 @@ const AUTO_PLAY_DELAY_MS = 300;
 const LINES_PER_PAGE = 6;
 const BACKGROUND_FADE_MS = 720;
 const CHARACTER_FADE_MS = 520;
+const BGM_STANDARD_VOLUME = 0.72;
+const BGM_FADE_MS = 2000;
 const CHARACTER_POSITIONS = ["left", "center", "right"];
 
 const VISUAL_CONFIG = {
@@ -93,6 +95,8 @@ const state = {
     bgmSrc: "",
     bgmTarget: "",
     bgmPendingPlay: false,
+    bgmFadeFrame: 0,
+    bgmTransitionId: 0,
   },
 };
 
@@ -130,7 +134,7 @@ async function init() {
 function bindControls() {
   state.audio.bgmElement.loop = true;
   state.audio.bgmElement.preload = "auto";
-  state.audio.bgmElement.volume = 0.72;
+  state.audio.bgmElement.volume = BGM_STANDARD_VOLUME;
 
   elements.game.addEventListener("pointerdown", handlePointerDown);
   elements.game.addEventListener("contextmenu", handleContextMenu);
@@ -809,22 +813,28 @@ function setBgm(src) {
   }
 
   const audio = state.audio.bgmElement;
+  const hasPlayingBgm = Boolean(state.audio.bgmSrc) && !audio.paused && audio.volume > 0;
+  const transitionId = state.audio.bgmTransitionId + 1;
   state.audio.bgmTarget = nextSrc;
   state.audio.bgmPendingPlay = false;
+  state.audio.bgmTransitionId = transitionId;
+  cancelBgmTransition();
 
   if (!nextSrc) {
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-    state.audio.bgmSrc = "";
+    fadeOutCurrentBgm(transitionId, () => {
+      stopCurrentBgm();
+    });
     return;
   }
 
-  audio.pause();
-  audio.src = nextSrc;
-  audio.currentTime = 0;
-  state.audio.bgmSrc = nextSrc;
-  requestBgmPlayback();
+  if (hasPlayingBgm) {
+    fadeOutCurrentBgm(transitionId, () => {
+      startBgmFadeIn(nextSrc, transitionId);
+    });
+    return;
+  }
+
+  startBgmFadeIn(nextSrc, transitionId);
 }
 
 function handleAudioGesture() {
@@ -838,12 +848,90 @@ function handleAudioGesture() {
     return;
   }
 
-  requestBgmPlayback();
+  requestBgmPlayback(() => {
+    if (audio.volume < BGM_STANDARD_VOLUME) {
+      fadeBgmVolume(audio.volume, BGM_STANDARD_VOLUME, BGM_FADE_MS, state.audio.bgmTransitionId);
+    }
+  });
 }
 
-function requestBgmPlayback() {
+function cancelBgmTransition() {
+  if (state.audio.bgmFadeFrame) {
+    window.cancelAnimationFrame(state.audio.bgmFadeFrame);
+    state.audio.bgmFadeFrame = 0;
+  }
+}
+
+function fadeOutCurrentBgm(transitionId, onComplete) {
+  const audio = state.audio.bgmElement;
+
+  if (!state.audio.bgmSrc || audio.paused || audio.volume <= 0) {
+    onComplete();
+    return;
+  }
+
+  fadeBgmVolume(audio.volume, 0, BGM_FADE_MS, transitionId, onComplete);
+}
+
+function startBgmFadeIn(src, transitionId) {
+  if (state.audio.bgmTarget !== src || state.audio.bgmTransitionId !== transitionId) {
+    return;
+  }
+
+  const audio = state.audio.bgmElement;
+  audio.pause();
+  audio.src = src;
+  audio.currentTime = 0;
+  audio.volume = 0;
+  state.audio.bgmSrc = src;
+  requestBgmPlayback(() => {
+    fadeBgmVolume(0, BGM_STANDARD_VOLUME, BGM_FADE_MS, transitionId);
+  });
+}
+
+function stopCurrentBgm() {
+  const audio = state.audio.bgmElement;
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  audio.volume = BGM_STANDARD_VOLUME;
+  state.audio.bgmSrc = "";
+  state.audio.bgmPendingPlay = false;
+}
+
+function fadeBgmVolume(fromVolume, toVolume, durationMs, transitionId, onComplete) {
+  const audio = state.audio.bgmElement;
+  const startedAt = performance.now();
+
+  const step = (now) => {
+    if (state.audio.bgmTransitionId !== transitionId) {
+      return;
+    }
+
+    const progress = Math.min((now - startedAt) / durationMs, 1);
+    audio.volume = fromVolume + (toVolume - fromVolume) * progress;
+
+    if (progress < 1) {
+      state.audio.bgmFadeFrame = window.requestAnimationFrame(step);
+      return;
+    }
+
+    state.audio.bgmFadeFrame = 0;
+    audio.volume = toVolume;
+
+    if (onComplete) {
+      onComplete();
+    }
+  };
+
+  audio.volume = fromVolume;
+  state.audio.bgmFadeFrame = window.requestAnimationFrame(step);
+}
+
+function requestBgmPlayback(onStarted) {
   const audio = state.audio.bgmElement;
   const requestedSrc = state.audio.bgmTarget;
+  const requestedTransitionId = state.audio.bgmTransitionId;
 
   if (!requestedSrc) {
     return;
@@ -852,12 +940,26 @@ function requestBgmPlayback() {
   state.audio.bgmPendingPlay = false;
   const playPromise = audio.play();
 
+  const handleStarted = () => {
+    if (
+      state.audio.bgmTarget === requestedSrc &&
+      state.audio.bgmTransitionId === requestedTransitionId &&
+      onStarted
+    ) {
+      onStarted();
+    }
+  };
+
   if (!playPromise || typeof playPromise.catch !== "function") {
+    handleStarted();
     return;
   }
 
-  playPromise.catch(() => {
-    if (state.audio.bgmTarget === requestedSrc) {
+  playPromise.then(handleStarted).catch(() => {
+    if (
+      state.audio.bgmTarget === requestedSrc &&
+      state.audio.bgmTransitionId === requestedTransitionId
+    ) {
       state.audio.bgmPendingPlay = true;
     }
   });
